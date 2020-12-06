@@ -116,6 +116,9 @@ export default class ActorWfrp4e extends Actor {
         ch.bonus = Math.floor(ch.value / 10)
         ch.cost = WFRP_Utility._calculateAdvCost(ch.advances, "characteristic")
     }
+
+    if (this.data.flags.autoCalcEnc)
+      this.data.data.status.encumbrance.max = this.data.data.characteristics.t.bonus + this.data.data.characteristics.s.bonus;
   }
 
   /**
@@ -169,8 +172,7 @@ export default class ActorWfrp4e extends Actor {
     if (data.flags.autoCalcRun)
       data.data.details.move.run = parseInt(data.data.details.move.value) * 4;
 
-    if (data.flags.autoCalcEnc)
-      data.data.status.encumbrance.max = data.data.characteristics.t.bonus + data.data.characteristics.s.bonus;
+
 
     if (game.settings.get("wfrp4e", "capAdvantageIB"))
       data.data.status.advantage.max = data.data.characteristics.i.bonus
@@ -2032,7 +2034,7 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
         // *********** Ammunition ***********
         else if (i.type === "ammunition") {
           i.encumbrance = (i.data.encumbrance.value * i.data.quantity.value).toFixed(2);
-          if (i.data.location != 0 && i.data.location != "")
+          if (!i.inContainer)
           {
             inventory.ammunition.show = true
             totalEnc += Number(i.encumbrance);
@@ -2044,7 +2046,7 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
         // Weapons are "processed" at the end for efficency
         else if (i.type === "weapon") {
           i.encumbrance = Math.floor(i.data.encumbrance.value * i.data.quantity.value);
-          if (i.data.location != 0 && i.data.location != "")
+          if (!i.inContainer)
           {
             i.toggleValue = i.data.equipped || false;
             inventory.weapons.show = true;
@@ -2057,7 +2059,7 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
         // Armour is prepared only if it is worn, otherwise, it is just pushed to inventory and encumbrance is calculated
         else if (i.type === "armour") {
           i.encumbrance = Math.floor(i.data.encumbrance.value * i.data.quantity.value);
-          if (i.data.location != 0 && i.data.location != "")
+          if (!i.inContainer)
           {
             i.toggleValue = i.data.worn.value || false;
             if (i.data.worn.value) {
@@ -2090,7 +2092,8 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
         else if (i.type === "container") {
           i.encumbrance = i.data.encumbrance.value;
 
-          if (i.data.location != 0 && i.data.location != "") {
+          if (!i.inContainer)
+          {
             if (i.data.worn.value) {
               i.encumbrance = i.encumbrance - 1;
               i.encumbrance = i.encumbrance < 0 ? 0 : i.encumbrance;
@@ -2106,7 +2109,8 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
         // The trappings tab does not have a "Trappings" section, but sections for each type of trapping instead
         else if (i.type === "trapping") {
           i.encumbrance = i.data.encumbrance.value * i.data.quantity.value;
-          if (i.data.location != 0 && i.data.location != "") {
+          if (!i.inContainer)
+          {
             // Push ingredients to a speciality array for futher customization in the trappings tab
             if (i.data.trappingType.value == "ingredient") {
               ingredients.items.push(i)
@@ -2193,7 +2197,7 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
         // Keep a running total of the coin value the actor has outside of containers
         else if (i.type === "money") {
           i.encumbrance = (i.data.encumbrance.value * i.data.quantity.value).toFixed(2);
-          if (i.data.location != 0 && i.data.location != "")
+          if (!i.inContainer)
           {
             money.coins.push(i);
             totalEnc += Number(i.encumbrance);
@@ -4050,8 +4054,8 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
       if (isNaN(reloadExtendedTest.data.SL.target))
         reloadExtendedTest.data.SL.target = 1;
   
-      if (getProperty(weapon, "flags.wfpr4e.reloading"))
-        this.deleteEmbeddedEntity("OwnedItem", { _id : getProperty(weapon, "flags.wfpr4e.reloading")})
+      if (getProperty(weapon, "flags.wfrp4e.reloading"))
+        this.deleteEmbeddedEntity("OwnedItem", { _id : getProperty(weapon, "flags.wfrp4e.reloading")})
   
       this.createEmbeddedEntity("OwnedItem", reloadExtendedTest).then(item => {
         ui.notifications.notify(game.i18n.format("ITEM.CreateReloadTest", {weapon : weapon.name}))
@@ -4127,6 +4131,8 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
       effect["flags.core.statusId"] = effect.id;
       if (effect.id == "dead")
         effect["flags.core.overlay"] = true;
+      if (effect.id == "unconscious")
+        this.addCondition("prone")
       delete effect.id
       return this.createEmbeddedEntity("ActiveEffect", effect)
     }
@@ -4148,6 +4154,12 @@ DiceWFRP.renderRollCard() as well as handleOpposedTarget().
     else if (existing)
     {
       existing.flags.wfrp4e.value -= value;
+
+      if (existing.flags.wfrp4e.value == 0 && (effect.id == "bleeding" || effect.id == "poisoned" || effect.id == "broken" || effect.id == "stunned"))
+      {
+        this.addCondition("fatigued")
+      }
+
       if (existing.flags.wfrp4e.value <= 0)
         return this.deleteEmbeddedEntity("ActiveEffect", existing._id)
       else 
